@@ -1,0 +1,17 @@
+main:
+
+timeout 9999
+
+waitexec lib/function.scr
+waitexec lib/morpheus/interpreter.scr
+
+local.ast = waitthread maps/dm/ast.scr::main
+
+level waittill spawn
+
+local.interpreter = level.Interpreter waitexec level.FunctionConstructor local.ast
+
+local.interpreter.run waitexec level.FunctionCall
+
+
+end

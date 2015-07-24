@@ -1,0 +1,25 @@
+main:
+
+level.ListSize = waitthread lib/function.scr::FunctionNew "ListSize"
+
+end
+
+
+// asdfqwer
+ListSize:
+	local.list = self.this
+	local.i = 0
+	local.count = 0
+
+	// determine indexing
+	if ((local.list[0] == NIL && local.list["0"] == NIL) &&
+	 	(local.list[1] != NIL || local.list["1"] != NIL))
+	{
+		local.i = 1
+	}
+
+	for (;local.list[local.i] != NIL || local.list["" + local.i] != NIL; local.i++)
+	{
+		local.count++;
+	}
+end local.count

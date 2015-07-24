@@ -1,0 +1,16 @@
+configs
+config.csv
+video
+save
+sound
+*.dll
+*.pk3
+*.cfg
+*.log
+*.map
+*.bak
+*.bat
+*.bsp
+*.prt
+*.min
+*.vis

@@ -1,0 +1,103 @@
+main:
+	if (!level.FUNCTION_SCR)
+	{
+		level.FUNCTION_SCR = 1
+
+		level.FunctionNew = lib/function.scr::FunctionNew
+		level.FunctionBind = lib/function.scr::FunctionBind
+		level.FunctionCall = lib/function.scr::FunctionCall
+		level.FunctionConstructor = lib/function.scr::FunctionConstructor
+
+		waitexec lib/stack.scr
+
+		level.callStack = waitthread StackNew
+	}
+end
+
+FunctionNew local.name local.file:
+	local.func = spawn Listener
+	local.func.this = game;
+	local.func.file = local.file
+	local.func.arguments = NULL
+	local.func.name = local.name
+	local.func.type = "function"
+	//local.func.closure // array
+end local.func
+
+FunctionBind local.newThis:
+	local.func = self;
+
+	local.newFunc = waitthread FunctionNew local.func.name local.func.file
+	local.newFunc.this = local.newThis;
+
+end local.newFunc
+
+FunctionCall local.newThis local.arg1 local.arg2 local.arg3 local.arg4 local.arg5 local.arg6:
+	local.fp = self
+
+	local.callThis = local.fp.this
+	if (local.newThis != NIL && local.newThis != NULL)
+	{
+		local.callThis = local.newThis
+	}
+
+	local.thisListener = spawn Listener
+	local.thisListener.this = local.callThis
+	local.thisListener.file = local.fp.file
+	local.thisListener.arguments = local.arg1::local.arg2::local.arg3::local.arg4::local.arg5::local.arg6
+
+	println "Calling: " local.fp.file "::" local.fp.name " (" local.callThis ") " local.arg1 " " local.arg2 " " local.arg3 " " local.arg4 " " local.arg5 " " local.arg6
+
+	local.callData["name"] = local.fp.name
+	local.callData["this"] = local.callThis
+	local.callData["args"] = local.arg1::local.arg2::local.arg3::local.arg4::local.arg5::local.arg6
+
+	local.stackSelf = spawn Listener
+	local.stackSelf.this = level.callStack
+	local.stackSelf waitthread lib/stack.scr::StackPush local.callData
+
+	if (local.fp.file)
+	{
+		local.returnValue = local.thisListener waitexec local.fp.file::local.fp.name local.arg1 local.arg2 local.arg3 local.arg4 local.arg5 local.arg6
+	}
+	else
+	{
+		local.returnValue = local.thisListener waitexec local.fp.name local.arg1 local.arg2 local.arg3 local.arg4 local.arg5 local.arg6
+	}
+
+	println "Returning value (" local.returnValue ") from function: " local.fp.name
+
+	local.stackSelf waitexec lib/stack.scr::StackPop local.callData
+ 	local.stackSelf delete
+
+	local.thisListener delete
+
+end local.returnValue
+
+FunctionConstructor local.arg1 local.arg2:
+	local.fp = self
+
+	local.obj = spawn Listener
+	self waitthread FunctionCall local.obj local.arg1 local.arg2 local.arg3 local.arg4 local.arg5 local.arg6
+
+	// This isn't used yet, but it's like protoypal inheritance
+	local.s = self.methods.size
+
+	for (local.i = 1; local.i <= local.s; local.i++)
+	{
+		local.obj[self.methods[local.i]] = self.methods[local.i]
+	}
+end local.obj
+
+
+CallStackTrace:
+	local.node = level.callStack["top"]
+	println ("===========STACK TRACE at " + local.node["data"]["name"] + "===========")
+	println ("        occurred at: " + local.node["data"]["name"])
+	local.node = local.node["next"]
+	while (local.node)
+	{
+		println ("        called from: " + local.node["data"]["name"])
+		local.node = local.node["next"]
+	}
+end

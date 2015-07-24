@@ -1,0 +1,66 @@
+main:
+
+if !(level.STACK_SCR)
+{
+	level.STACK_SCR = 1
+	
+	waitexec lib/function.scr
+
+	level.StackPush = waitthread level.FunctionNew "StackPush" "lib/stack.scr"
+	level.StackNew = waitthread level.FunctionNew "StackNew" "lib/stack.scr"
+	level.StackPop = waitthread level.FunctionNew "StackPop" "lib/stack.scr"
+	level.StackPeek = waitthread level.FunctionNew "StackPeek" "lib/stack.scr"
+	level.StackBottom = waitthread level.FunctionNew "StackBottom" "lib/stack.scr"
+}
+
+end
+
+StackPush local.value:
+
+	local.stack = self.this
+	local.top = local.stack["top"]
+	local.newTop = waitthread stackCreateNode local.value local.top;
+	local.stack["top"] = local.newTop;
+	local.stack["size"]++
+
+end local.stack
+
+StackPeek:
+	local.stack = self.this
+	local.top = local.stack["top"]
+	local.data = local.top["data"]
+end local.data
+
+StackBottom:
+	local.stack = self.this
+	local.node = local.stack["top"]
+	while (local.node["next"])
+	{
+		iprintlnbold_noloc local.node "cool"
+		local.node = local.node["next"]
+	}
+end local.node["data"]
+
+StackPop:
+	local.stack = self.this
+	local.prevTop = local.stack["top"]
+	local.second = local.prevTop["next"]
+	local.stack["top"] = local.second
+	local.stack["size"]--
+end local.prevTop["data"]
+
+StackSize:
+	local.stack = self.this
+	local.count = local.stack["size"]
+end local.count
+
+StackNew:
+	local.stack["top"] = NULL
+	local.stack["size"] = 0
+end local.stack
+
+stackCreateNode local.data local.next local.prev:
+	local.node["data"] = local.data
+	local.node["next"] = local.next
+	local.node["prev"] = local.prev
+end local.node

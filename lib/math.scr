@@ -1,0 +1,18 @@
+main:
+
+level.Math["factorial"] = waitthread FunctionNew "factorial"
+
+end
+
+factorial local.num:
+
+	if (local.num == NIL || local.num == NULL) { end }
+
+	if (local.num <= 1)
+	{
+		end 1
+	}
+
+	local.temp = local.num * (level.factorial waitthread FunctionCall NULL (local.num - 1))
+
+end local.temp

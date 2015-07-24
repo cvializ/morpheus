@@ -1,0 +1,1990 @@
+main:
+
+waitexec lib/function.scr
+waitexec lib/stack.scr
+
+level.Interpreter = waitexec level.FunctionNew lib/morpheus/interpreter.scr::Interpreter
+level.ListSize = waitexec level.FunctionNew lib/morpheus/interpreter.scr::ListSize
+
+end
+
+
+Interpreter local.code local.opt_initFunc:
+	local.this = self.this
+	local.this.file = "lib/morpheus/interpreter.scr"
+
+	// Class Functions
+	local.this.step = (waitexec level.FunctionNew "InterpreterStep" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.run = (waitexec level.FunctionNew "InterpreterRun" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.createScope = (waitexec level.FunctionNew "InterpreterCreateScope" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.getScope = (waitexec level.FunctionNew "InterpreterGetScope" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.getValueFromScope = (waitexec level.FunctionNew "InterpreterGetValueFromScope" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.setValueToScope = (waitexec level.FunctionNew "InterpreterSetValueToScope" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.initGlobalScope = (waitexec level.FunctionNew "InterpreterInitGlobalScope" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.populateScope_ = (waitexec level.FunctionNew "InterpreterPopulateScope" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.getValue = (waitexec level.FunctionNew "InterpreterGetValue" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.setValue = (waitexec level.FunctionNew "InterpreterSetValue" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	//local.this.initFunction = (waitexec level.FunctionNew "InterpreterInitFunction" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.comp = (waitexec level.FunctionNew "InterpreterComp" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.arrayIndex = (waitexec level.FunctionNew "InterpreterArrayIndex" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.createPrimitive = (waitexec level.FunctionNew "InterpreterCreatePrimitive" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.createObject = (waitexec level.FunctionNew "InterpreterCreateObject" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.getProperty = (waitexec level.FunctionNew "InterpreterGetProperty" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.hasProperty = (waitexec level.FunctionNew "InterpreterHasProperty" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.setProperty = (waitexec level.FunctionNew "InterpreterSetProperty" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+	local.this.deleteProperty = (waitexec level.FunctionNew "InterpreterDeleteProperty" "lib/morpheus/interpreter.scr") waitexec level.FunctionBind local.this
+
+	local.this.isa = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterIsa) waitexec level.FunctionBind local.this
+
+	// Cache a hash of keys
+	local.this.ASTKEYS = (waitthread InterpreterGetAstKeys)
+	local.this.ASTKEYLIST = (waitthread InterpreterGetAstKeyList)
+
+	local.this.initFunc_ = local.opt_initFunc
+	local.this.UNDEFINED = local.this.createPrimitive waitexec level.FunctionCall NIL
+	local.this.INFINITY = 2147483646
+	local.this.NAN = 2147483647
+	local.this.ast = local.code
+	local.this.stateStack = level.StackNew waitexec level.FunctionCall
+
+	local.scope = local.this.createScope waitexec level.FunctionCall NULL local.this.ast NULL
+	local.stackFrame["node"] = local.this.ast
+	local.stackFrame["scope"] = local.scope
+	local.stackFrame["thisExpression"] = local.scope
+
+	local.dummy = level.StackPush waitexec level.FunctionCall local.this.stateStack local.stackFrame
+end
+
+InterpreterStep:
+	local.this = self.this
+
+	println "stack size: " local.this.stateStack["size"]
+
+	if (local.this.stateStack["size"] == 0)
+	{
+		end 0
+	}
+
+	local.state = (level.StackPeek waitexec level.FunctionCall local.this.stateStack)
+	println "STEPTYPE: " local.state["node"]
+	local.funcName = "InterpreterStep" + local.state["node"]["type"]
+	local.func = (waitexec level.FunctionNew local.funcName self.file) waitexec level.FunctionBind local.this
+	local.func waitexec level.FunctionCall NULL
+end 1
+
+InterpreterRun:
+	while(self.this.step waitexec level.FunctionCall NULL)
+	{
+		// run infinitely
+	}
+end
+
+InterpreterStepProgram: // same as stepBlockStatement
+InterpreterStepBlockStatement:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+	local.n = local.state["n_"]
+
+	if (!local.n) {
+		local.n = "0"
+	}
+
+	if (local.node["body"][local.n])
+	{
+		// This is gross, but basically the hash index needs to always
+		// be a string, so we cast to int, add 1 then cast back to string
+		local.state["n_"] = ((int local.n) + 1) + ""
+		local.newFrame["node"] = local.node["body"][local.n]
+
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+	}
+end
+
+InterpreterStepEmptyStatement:
+	local.this = self.this
+
+	level.StackPop waitexec level.FunctionCall local.this.stateStack
+end
+
+InterpreterStepMemberExpression:
+	local.this = self.this
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+	if (!local.state["doneObject_"])
+	{
+		local.state["doneObject_"] = 1
+		local.newFrame["node"] = local.node["object"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else if (!local.state["doneProperty_"])
+	{
+		local.state["doneProperty_"] = 1
+		local.state["object"] = local.state["value"]
+		local.newFrame["node"] = local.node["property"]
+		println "COMPUTED???: " !local.node["computed"]
+		local.newFrame["components"] = !local.node["computed"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.top = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+
+		if (local.state["components"])
+		{
+			println "IS COMPONENTS"
+			// TODO: is this the right translation?
+			local.top["value"]["0"] = local.state["object"]
+			local.top["value"]["1"] = local.state["value"]
+		}
+		else
+		{
+			println "NOT COMPONENTS"
+			local.top["value"] = (local.this.getProperty waitexec level.FunctionCall NULL local.state["object"] local.state["value"])
+		}
+	}
+end
+
+InterpreterStepNewExpression:
+InterpreterStepCallExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (!local.state["doneCallee_"])
+	{
+		local.state["doneCallee_"] = 1
+		local.newFrame["node"] = local.node["callee"]
+		local.newFrame["components"] = 1
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		if (!local.state["func_"])
+		{
+			if (local.state["value"].type == "function")
+			{
+				local.state["func_"] = local.state["value"]
+			}
+			else
+			{
+				local.state["member_"] = local.state["value"]["0"]
+				local.state["func_"] = local.this.getValue waitexec level.FunctionCall NULL local.state["value"]
+				if (!local.state["func_"] || local.state["func_"].type != "function")
+				{
+					println ("ERROR: Tried to call a non-function?")
+					end (waitexec lib/function.scr::CallStackTrace)
+				}
+			}
+
+			// Determine vale of 'this' in function
+			if (local.state["node"]["type"] == "NewExpression")
+			{
+				local.state["funcThis_"] = local.this.createObject waitexec level.FunctionCall NULL local.state["func_"]
+				local.state["isConstructor_"] = 1
+			}
+			else if (local.state["value"]["0"])
+			{
+				local.state["funcThis_"] = local.state["value"]["0"]
+			}
+			else
+			{
+				local.state["funcThis_"] = (level.StackBottom waitexec level.FunctionCall local.this.stateStack)["thisExpression"] // TODO: is this right?
+			}
+
+			local.state["arguments"] = NIL
+			local.n = 0
+		}
+		else
+		{
+			local.n = local.state["n_"]
+			local.stateArgsSize = (level.ListSize waitexec level.FunctionCall local.state["arguments"])
+			local.nodeArgsSize = (level.ListSize waitexec level.FunctionCall local.node["arguments"])
+			if (local.stateArgsSize != local.nodeArgsSize)
+			{
+				local.state["arguments"][(local.n - 1) + ""] = local.state["value"]
+			}
+		}
+
+		if (local.node["arguments"][local.n + ""])
+		{
+			local.state["n_"] = local.n + 1
+			local.newFrame["node"] = local.node["arguments"][local.n + ""]
+			level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+		}
+		else if (!local.state["doneExec"])
+		{
+			local.state["doneExec"] = 1
+			local.funcNode = local.state["func_"].node;
+			if (local.funcNode &&
+				(local.funcNode.type == "FunctionApply_" ||
+				local.funcNode.type == "FunctionCall_"))
+			{
+				local.state["funcThis_"] = local.this.arguments["0"]
+				if (local.funcNode.type == "FunctionApply")
+				{
+					// unpack all the arguments from the provided array
+					local.argsList = local.state["arguments"]["1"] // TODO: check the type on this
+					if (local.argsList && (local.this.isa waitexec level.FunctionCall NULL local.argsList local.this.ARRAY))
+					{
+						local.argsLength = (level.ListSize waitexec level.FunctionCall NULL local.argsList)
+						local.state["arguments"] = NIL
+						for (local.i = 0; local.i < local.argsLength; local.i++)
+						{
+							local.state["arguments"][local.i + ""] = (local.this.getProperty waitexec level.FunctionCall NULL local.argsList local.i)
+							// TODO: Continue after stepArrayExpression is implemented
+						}
+					}
+				}
+			}
+		}
+	}
+end
+
+InterpreterStepObjectExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+	local.valueToggle = local.state["valueToggle"]
+	local.n = local.state["n"]
+	if (!local.n)
+	{
+		local.n = 0
+	}
+
+	if (!local.state["object"])
+	{
+		local.state["object"] = (local.this.createObject waitexec level.FunctionCall NULL local.this.OBJECT)
+	}
+	else
+	{
+		if (local.valueToggle)
+		{
+			local.state["key"] = local.state["value"]
+		}
+		else
+		{
+			local.this.setProperty waitexec level.FunctionCall NULL local.state["object"] local.state["key"] local.state["value"]
+		}
+	}
+	local.prop = local.node["properties"][local.n + ""]
+	if (local.prop)
+	{
+		if (local.valueToggle)
+		{
+			local.state["n"] = local.n + 1
+			local.newFrame["node"] = local.node["properties"][local.n + ""]["value"]
+			level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+		}
+		else
+		{
+			local.newFrame["node"] = local.node["properties"][local.n + ""]["key"]
+			local.newFrame["components"] = 1
+			level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+		}
+		local.state["valueToggle"] = !local.state["valueToggle"]
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.top = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		local.top["value"] = local.state["object"]
+	}
+end
+
+InterpreterStepReturnStatement:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (local.node["argument"] && !local.state["done"])
+	{
+		local.state["done"] = 1
+		local.newFrame["node"] = local.node["argument"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		local.value = local.state["value"]
+		if (!local.value)
+		{
+			local.value = local.this.UNDEFINED
+		}
+
+		// TODO: It was a do/while, but does it need to be?
+		//
+		// level.StackPop waitexec level.FunctionCall local.this.stateStack
+		// if (local.this.stateStack["size"] == 0)
+		// {
+		// 	println ("ERROR: Return on empty stack")
+		// 	end (waitexec lib/function.scr::CallStackTrace)
+		// }
+		// local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+
+		while (local.state["node"]["type"] != "CallExpression")
+		{
+			level.StackPop waitexec level.FunctionCall local.this.stateStack
+			if (local.this.stateStack["size"] == 0)
+			{
+				println ("ERROR: Return on empty stack")
+				end (waitexec lib/function.scr::CallStackTrace)
+			}
+			local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		}
+		local.state["value"] = local.value
+	}
+end
+
+InterpreterStepExpressionStatement:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	if (!local.state["done"])
+	{
+		local.state["done"] = 1
+		local.newFrame["node"] = local.state["node"]["expression"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.this.value = local.state["value"]
+		println "****ExpressionStatement value: " local.state["value"].data
+	}
+end
+
+InterpreterStepFunctionDeclaration:
+	level.StackPop waitexec level.FunctionCall local.this.stateStack
+end
+
+InterpreterStepFunctionExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	level.StackPop waitexec level.FunctionCall local.this.stateStack
+
+	local.top = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.top["value"] = local.this.createFunction waitexec level.FunctionCall NULL local.state["node"]
+end
+
+InterpreterStepIdentifier:
+	local.this = self.this
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	level.StackPop waitexec level.FunctionCall local.this.stateStack
+	local.name = local.this.createPrimitive waitexec level.FunctionCall NULL local.state["node"]["name"]
+
+	local.top = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	if (local.state["components"])
+	{
+		local.top["value"] = local.name
+	}
+	else
+	{
+		local.top["value"] = local.this.getValueFromScope waitexec level.FunctionCall NULL local.name
+	}
+end
+
+InterpreterStepLiteral:
+	local.this = self.this
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	level.StackPop waitexec level.FunctionCall local.this.stateStack
+
+	println "literal: " local.state["node"]["value"]
+
+	local.primitive = local.this.createPrimitive waitexec level.FunctionCall NULL local.state["node"]["value"]
+	local.newState = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.newState["value"] = local.primitive
+end
+
+InterpreterStepLogicalExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (local.node["operator"] != "&&" && local.node["operator"] != "||")
+	{
+		println ("Unknown logical operator: " + local.node["operator"])
+		end
+	}
+
+	if (!local.state["doneLeft_"])
+	{
+		local.state["doneLeft_"] = 1
+		local.newFrame["node"] = local.node["left"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else if (!local.state["doneRight_"])
+	{
+		local.boolVal = (local.state["value"].toBoolean waitexec level.FunctionCall)
+
+		if ((local.node["operator"] == "&&" && !local.boolVal) ||
+			(local.node["operator"] == "||" && local.boolVal))
+		{
+			// shortcut evaluation
+			level.StackPop waitexec level.FunctionCall local.this.stateStack
+			local.newState = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+			local.newState["value"] = local.state["value"]
+		}
+		else
+		{
+			local.state["doneRight_"] = 1
+			local.newFrame["node"] = local.node["right"]
+			level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+		}
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.newState = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		local.newState["value"] = local.state["value"]
+	}
+end
+
+InterpreterStepAssignmentExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (!local.state["doneLeft"])
+	{
+		local.state["doneLeft"] = 1
+		local.newFrame["node"] = local.node["left"]
+		local.newFrame["components"] = 1
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else if (!local.state["doneRight"])
+	{
+		local.state["doneRight"] = 1
+		local.state["leftSide"] = local.state["value"]
+		local.newFrame["node"] = local.node["right"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.leftSide = local.state["leftSide"]
+		local.rightSide = local.state["value"]
+		local.value = NIL
+
+		if (local.node["operator"] == "=")
+		{
+			local.value = local.rightSide
+		}
+		else
+		{
+			local.leftValue = local.this.getValue waitexec level.FunctionCall NULL local.leftSide
+			local.rightValue = local.rightSide
+			local.leftNumber = local.leftValue.toNumber waitexec level.FunctionCall
+			local.rightNumber = local.rightValue.toNumber waitexec level.FunctionCall
+
+			if (local.node["operator"] == "+=")
+			{
+				local.left = NIL
+				local.right = NIL
+				if (local.leftValue.type == "string" || local.rightValue.type == "string")
+				{
+					local.left = local.leftValue.toString waitexec level.FunctionCall
+					local.right = local.rightValue.toString waitexec level.FunctionCall
+				}
+				else
+				{
+					local.left = local.leftNumber
+					local.right = local.rightNumber
+				}
+				local.value = local.left + local.right
+			}
+			else if (node.operator == "-=")
+			{
+				local.value = local.leftNumber - local.rightNumber
+			}
+			else if (node.operator == "*=")
+			{
+				local.value = local.leftNumber * local.rightNumber
+			}
+			else if (node.operator == "/=")
+			{
+				local.value = local.leftNumber / local.rightNumber
+			}
+			else if (node.operator == "%=")
+			{
+				local.value = (int local.leftNumber) % (int local.rightNumber)
+			}
+			else if (node.operator == "<<=")
+			{
+				//local.value = local.leftNumber << local.rightNumber
+				local.value = (int local.leftValue)
+				for (local.i = 0; local.i < local.rightValue; local.i++)
+				{
+					local.value = local.value * 2
+				}
+			}
+			else if (node.operator == ">>=")
+			{
+				//local.value = local.leftNumber >> local.rightNumber
+				local.value = (int local.leftValue)
+				for (local.i = 0; local.i < local.rightValue; local.i++)
+				{
+					local.value = local.value / 2
+				}
+			}
+			else if (node.operator == ">>>=")
+			{
+				//local.value = local.leftNumber >>> local.rightNumber
+				local.value = (int local.leftValue)
+				for (local.i = 0; local.i < local.rightValue; local.i++)
+				{
+					local.value = local.value / 2
+				}
+			}
+			else if (node.operator == "&=")
+			{
+				local.value = (int local.leftNumber) & (int local.rightNumber)
+			}
+			else if (node.operator == "^=")
+			{
+				local.value = (int local.leftNumber) ^ (int local.rightNumber)
+			}
+			else if (node.operator == "|=")
+			{
+				local.value = (int local.leftNumber) | (int local.rightNumber)
+			}
+			else
+			{
+				println ("ERROR: Unknown assignment expression: " + node.operator)
+				end (waitexec lib/function.scr::CallStackTrace)
+			}
+			local.value = local.this.createPrimitive waitexec level.FunctionCall NULL local.value
+		}
+		local.this.setValue waitexec level.FunctionCall NULL local.leftSide local.value
+		local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		local.state["value"] = local.value
+	}
+end
+
+InterpreterStepBinaryExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (!local.state["doneLeft"])
+	{
+		local.state["doneLeft"] = 1
+		local.newFrame["node"] = local.node["left"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else if (!local.state["doneRight"])
+	{
+		local.state["doneRight"] = 1
+		local.state["leftValue"] = local.state["value"]
+		local.newFrame["node"] = local.node["right"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.leftSide = local.state["leftValue"]
+		println "LEFT SIDE: " local.leftSide
+		local.rightSide = local.state["value"]
+
+
+		local.tol = waitthread typeof local.leftSide.data
+		local.tor = waitthread typeof local.rightSide.data
+
+		local.value = NIL
+		local.comp = local.this.comp waitexec level.FunctionCall NULL local.leftSide local.rightSide
+
+		if (local.node["operator"] == "==" || local.node["operator"] == "!=")
+		{
+			local.value = (local.comp == 0)
+			if (local.node["operator"] == "!=")
+			{
+				local.value = !local.value
+			}
+		}
+		else if (local.node["operator"] == "===" || local.nodeOperator == "!==")
+		{
+			if (local.leftSide.isPrimitive && local.rightSide.isPrimitive)
+			{
+				local.value = (local.leftSide["data"] == local.rightSide["data"])
+				local.value = (local.value && (local.tol == local.tor))
+			}
+			else
+			{
+				local.value = (local.leftSide == local.rightSide)
+			}
+
+			if (local.node["operator"] == "!==")
+			{
+				local.value = !local.value
+			}
+		}
+		else if (local.node["operator"] == ">")
+		{
+			local.value = (local.comp == 1)
+		}
+		else if (local.node["operator"] == ">=")
+		{
+			local.value = (local.comp >= 0)
+		}
+		else if (local.node["operator"] == "<")
+		{
+			local.value = (local.comp == -1)
+		}
+		else if (local.node["operator"] == "<=")
+		{
+			local.value = (local.comp <= 0)
+		}
+		else if (local.node["operator"] == "+")
+		{
+			if (local.leftSide.type == "string" || local.rightSide.type == "string")
+			{
+				local.leftValue = (local.leftSide.toString waitexec level.FunctionCall)
+				local.rightValue = (local.rightSide.toString waitexec level.FunctionCall)
+			}
+			else
+			{
+				local.leftValue = (local.leftSide.toNumber waitexec level.FunctionCall)
+				local.rightValue = (local.rightSide.toNumber waitexec level.FunctionCall)
+			}
+
+			local.value = local.leftValue + local.rightValue
+		}
+		else if (local.node["operator"] == "in")
+		{
+			local.value = (local.this.hasProperty waitexec level.FunctionCall NULL local.leftSide local.rightSide)
+		}
+		else
+		{
+			local.leftValue = (local.leftSide.toNumber waitexec level.FunctionCall)
+			local.rightValue = (local.rightSide.toNumber waitexec level.FunctionCall)
+			if (local.node["operator"] == "-")
+			{
+				local.value = local.leftValue - local.rightValue
+			}
+			else if (local.node["operator"] == "*")
+			{
+				local.value = local.leftValue * local.rightValue
+			}
+			else if (local.node["operator"] == "/")
+			{
+				local.value = local.leftValue / local.rightValue
+			}
+			else if (local.node["operator"] == "%")
+			{
+				local.value = (int local.leftValue) % (int local.rightValue)
+			}
+			else if (local.node["operator"] == "&")
+			{
+				local.value = (int local.leftValue) & (int local.rightValue)
+			}
+			else if (local.node["operator"] == "|")
+			{
+				local.value = (int local.leftValue) | (int local.rightValue)
+			}
+			else if (local.node["operator"] == "^")
+			{
+				local.value = (int local.leftValue) ^ (int local.rightValue)
+			}
+			else if (local.node["operator"] == "<<")
+			{
+				//local.value = local.leftValue << local.rightValue;
+				local.value = (int local.leftValue)
+				for (local.i = 0; local.i < local.rightValue; local.i++)
+				{
+					local.value = local.value * 2
+				}
+			}
+			else if (local.node["operator"] == ">>")
+			{
+				//local.value = local.leftValue >> local.rightValue;
+				local.value = (int local.leftValue)
+				for (local.i = 0; local.i < local.rightValue; local.i++)
+				{
+					local.value = local.value / 2
+				}
+			}
+			else if (local.node["operator"] == ">>>")
+			{
+				//local.value = local.leftValue >>> local.rightValue;
+				local.value = (int local.leftValue)
+				for (local.i = 0; local.i < local.rightValue; local.i++)
+				{
+					local.value = local.value / 2
+				}
+			}
+			else
+			{
+				println ("ERROR: Unknown binary operator: " + local.node["operator"])
+				end (waitexec lib/function.scr::CallStackTrace)
+			}
+		}
+		println "BinaryExpression value: " local.value
+		local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		local.primitiveValue = local.this.createPrimitive waitexec level.FunctionCall NULL local.value
+		local.state["value"] = local.primitiveValue
+	}
+end
+
+InterpreterStepIfStatement:
+InterpreterStepConditionalExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+
+	if (!local.state["done"])
+	{
+		if (!local.state["test"])
+		{
+			local.state["test"] = 1
+			local.newFrame["node"] = local.state["node"]["test"]
+			level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+		}
+		else
+		{
+			local.state["done"] = 1
+			local.testValue = (local.state["value"].toBoolean waitexec level.FunctionCall)
+			if (local.testValue && local.state["node"]["consequent"])
+			{
+				local.newFrame["node"] = local.state["node"]["consequent"]
+				level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+			}
+			else if (!local.testValue && local.state["node"]["alternate"])
+			{
+				local.newFrame["node"] = local.state["node"]["alternate"]
+				level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+			}
+		}
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		if (local.state["node"]["type"] == "ConditionalExpression")
+		{
+			local.newState = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+			local.newState["value"] = local.state["value"]
+			println "ConditionalExpression value: " local.state["value"].data
+		}
+	}
+end
+
+InterpreterStepUnaryExpression:
+	local.this = self.this
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (!local.state["done"])
+	{
+		local.state["done"] = 1
+		local.newFrame["node"] = local.node["argument"]
+		if (local.node["operator"] == "delete")
+		{
+			local.newFrame["components"] = 1
+		}
+
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		//local.value = NIL
+
+		if (local.node["operator"] == "-")
+		{
+			local.value = -(local.state["value"].toNumber waitexec level.FunctionCall)
+		}
+		else if (local.node["operator"] == "+")
+		{
+			local.value = (local.state["value"].toNumber waitexec level.FunctionCall)
+		}
+		else if (local.node["operator"] == "!")
+		{
+			local.value = !(local.state["value"].toNumber waitexec level.FunctionCall)
+		}
+		else if (local.node["operator"] == "~")
+		{
+			local.value = ~(local.state["value"].toNumber waitexec level.FunctionCall)
+		}
+		else if (local.node["operator"] == "typeof")
+		{
+			local.value = local.state["value"].type
+		}
+		else if (local.node["operator"] == "delete")
+		{
+			// TODO: implement delete
+		}
+		else if (local.node["operator"] == "void")
+		{
+			local.value = NIL
+		}
+		else
+		{
+			println ("ERROR Unknown unary operator: " + local.node["operator"])
+			end (waitexec lib/function.scr::CallStackTrace)
+		}
+		local.newState = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		local.newState["value"] = (local.this.createPrimitive waitexec level.FunctionCall NULL local.value)
+	}
+end
+
+InterpreterStepUpdateExpression:
+	local.this = self.this
+
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (local.state["done"])
+	{
+		local.state["done"] = 1
+		local.newFrame["node"] = local.node["argument"]
+		local.newFrame["components"] = 1
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+		local.leftSide = local.state["value"]
+		local.leftValue = (local.this.getValue waitexec level.FunctionCall NULL local.leftSide).toNumber waitexec level.FunctionCall
+		local.changeValue = NIL
+
+		if (local.node["operator"] == "++")
+		{
+			local.changeValue = local.this.createPrimitive waitexec level.FunctionCall NULL (local.leftValue + 1)
+		}
+		else if (local.node["operator"] == "--")
+		{
+			local.changeValue = local.this.createPrimitive waitexec level.FunctionCall NULL (local.leftValue - 1)
+		}
+		else
+		{
+			println ("ERROR: Unknown update expression: " + local.node["operator"])
+			end (waitexec lib/function.scr::CallStackTrace)
+		}
+
+		local.this.setValue waitexec level.FunctionCall NULL local.leftSide local.changeValue
+		local.returnValue = NIL
+		if (local.node["prefix"])
+		{
+			local.returnValue = NIL
+		}
+		else
+		{
+			local.returnValue = leftValue
+		}
+
+		local.newState = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+		local.newState["value"] = (local.this.createPrimitive waitexec level.FunctionCall NULL local.returnValue)
+	}
+
+InterpreterStepVariableDeclaration:
+	local.this = self.this
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	local.n = local.state["n"]
+	if (local.n == NIL)
+	{
+		local.n = 0
+	}
+
+	if (local.node["declarations"]["" + local.n])
+	{
+		println "local.n == " local.n
+		local.state["n"] = local.n + 1
+		local.newFrame["node"] = local.node["declarations"][local.n + ""]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+	}
+end
+
+InterpreterStepVariableDeclarator:
+	local.this = self.this
+	local.state = level.StackPeek waitexec level.FunctionCall local.this.stateStack
+	local.node = local.state["node"]
+
+	if (local.node["init"] && !local.state["done"])
+	{
+		local.state["done"] = 1
+		local.newFrame["node"] = local.node["init"]
+		level.StackPush waitexec level.FunctionCall local.this.stateStack local.newFrame
+	}
+	else
+	{
+		local.hasProp = local.this.hasProperty waitexec level.FunctionCall NULL local.this local.node["id"]["name"]
+		if (!local.hasProp || local.node["init"])
+		{
+			local.value = NIL
+			if (local.node["init"])
+			{
+				local.value = local.state["value"]
+			}
+			else
+			{
+				local.value = local.this.UNDEFINED
+			}
+
+			local.primitive = local.this.createPrimitive waitexec level.FunctionCall NULL local.node["id"]["name"]
+			local.this.setValue waitexec level.FunctionCall NULL local.primitive local.value
+		}
+		level.StackPop waitexec level.FunctionCall local.this.stateStack
+	}
+end
+
+InterpreterGetValueFromScope local.name:
+	local.this = self.this
+
+	local.scope = local.this.getScope waitexec level.FunctionCall
+
+	if (local.name.toString)
+	{
+		local.nameStr = local.name.toString waitexec level.FunctionCall
+	}
+	else
+	{
+		local.nameStr = local.name
+	}
+
+	while (local.scope)
+	{
+		println "Is [" local.nameStr "] in the scope? Answer: " (local.this.getProperty waitexec level.FunctionCall NULL local.scope local.nameStr)
+		if (local.this.hasProperty waitexec level.FunctionCall NULL local.scope local.nameStr)
+		{
+			local.value = local.this.getProperty waitexec level.FunctionCall NULL local.scope local.nameStr
+			end local.value
+		}
+		local.scope = local.scope.parentScope
+	}
+	println ("ERROR: GetValueFromScope Unknown identifier: " + local.nameStr)
+	end (waitexec lib/function.scr::CallStackTrace)
+end
+
+InterpreterSetValueToScope local.name local.value:
+	local.this = self.this
+
+	local.scope = local.this.getScope waitexec level.FunctionCall
+
+	if (local.name.toString)
+	{
+		local.nameStr = local.name.toString waitexec level.FunctionCall
+	}
+	else
+	{
+		local.nameStr = local.name
+	}
+
+	while (local.scope)
+	{
+		if (local.this.hasProperty waitexec level.FunctionCall NULL local.scope local.nameStr)
+		{
+			end (local.this.setProperty waitexec level.FunctionCall NULL local.scope local.nameStr local.value)
+		}
+		local.scope = local.scope.parentScope
+	}
+
+	println ("ERROR: SetValueToScope Unknown identifier: " + local.nameStr)
+	end (waitexec lib/function.scr::CallStackTrace)
+end
+
+InterpreterGetProperty local.obj local.name:
+	local.this = self.this
+
+	if (local.name.toString)
+	{
+		local.name = local.name.toString waitexec level.FunctionCall
+	}
+
+	local.isString = (local.this.isa waitexec level.FunctionCall NULL local.obj local.this.STRING)
+	local.isArray = (local.this.isa waitexec level.FunctionCall NULL local.obj local.this.ARRAY)
+
+	if (local.isString)
+	{
+		// if (local.name == "length")
+		// {
+		//
+		// }
+	}
+	else if (local.isArray && local.name == "length")
+	{
+
+	}
+
+	while (1)
+	{
+		if (local.obj.properties && local.obj.properties[local.name])
+		{
+			end (local.obj.properties[local.name])
+		}
+
+		if (local.obj.parent && local.obj.parent.properties && local.obj.parent.properties.protoype)
+		{
+			local.obj = local.obj.parent.properties["prototype"]
+		}
+		else
+		{
+			// No parent, reached the top
+			break;
+		}
+	}
+
+	end local.this.UNDEFINED
+end
+
+InterpreterHasProperty local.obj local.name:
+	local.this = self.this
+
+	if (local.name.toString)
+	{
+		local.name = local.name.toString waitexec level.FunctionCall
+	}
+	else
+	{
+		local.name = "" + local.name
+	}
+
+	if (local.obj.isPrimitive)
+	{
+		// error. primitives have no properties
+		end 0
+	}
+
+	local.isString = local.this.isa waitexec level.FunctionCall NULL local.obj local.this.STRING
+	local.isArray = local.this.isa waitexec level.FunctionCall NULL local.obj local.this.ARRAY
+
+	if (local.name == "length" && (local.isString || local.isArray))
+	{
+		end 1
+	}
+
+	if (local.isString)
+	{
+		// not implemented
+		//local.name = local.this.arrayIndex
+	}
+
+	while (1)
+	{
+		println "OBJ PROPS: " local.obj.properties
+		println "PROP NAME: " local.name
+		println "OBJ PROPS[" local.name "]: " local.obj.properties[local.name]
+		if (local.obj.properties && local.obj.properties[local.name] != NIL)
+		{
+			end 1
+		}
+
+		if (local.obj.parent && local.obj.parent.properties && local.obj.parent.properties["prototype"])
+		{
+			local.obj = local.obj.parent.properties["prototype"];
+		}
+		else
+		{
+			// no parent, reached the top
+			break;
+		}
+	}
+end 0
+
+InterpreterSetProperty local.obj local.name local.value local.opt_fixed local.opt_nonenum:
+	local.this = self.this
+
+	if (local.name.toString)
+	{
+		local.name = (local.name.toString waitexec level.FunctionCall)
+	}
+	else
+	{
+		local.name = "" + local.name
+	}
+
+	if (local.obj.isPrimitive == 1 || local.obj.fixed[local.name] != NIL)
+	{
+		println "Is primitive or fixed!"
+		end
+	}
+
+	// if (local.this.isa waitexec level.FunctionCall local.obj local.this.STRING)
+	// {
+	// 	// not yet implemented
+	// }
+	//
+	// if (local.this.isa waitexec level.FunctionCall local.obj local.this.Array)
+	// {
+	// 	// not yet implemented
+	// }
+
+	local.obj.properties[local.name] = local.value
+	println "Set property [" local.name "] to " local.value
+	if (local.opt_fixed)
+	{
+		local.obj.fixed[local.name] = 0
+	}
+
+	if (local.opt_nonenum)
+	{
+		local.obj.nonenumerable[local.name] = 0
+	}
+end
+
+InterpreterDeleteProperty local.obj local.name:
+	local.this = self.this
+
+	if (local.name.toString)
+	{
+		local.name = (local.name.toString waitexec level.FunctionCall)
+	}
+	else
+	{
+		local.name = "" + local.name
+	}
+
+	if (local.obj.isPrimitive || local.obj.fixed[local.name])
+	{
+		end 0
+	}
+
+	if (local.name == "length" && local.this.isa waitexec level.FunctionCall NULL local.obj local.this.ARRAY)
+	{
+		end 0
+	}
+
+	local.obj.properties[local.name] = NIL
+end 1
+
+InterpreterGetScope:
+	local.this = self.this
+	local.stateStack = local.this.stateStack
+	local.node = local.stateStack["top"]
+	while (local.node)
+	{
+		if (local.node["data"]["scope"])
+		{
+			println "SCOPEX: " local.node["data"]["scope"].properties["x"]
+			end local.node["data"]["scope"]
+		}
+		local.node = local.node["next"]
+	}
+	println ("ERROR: No scope found")
+	end (waitexec lib/function.scr::CallStackTrace)
+end
+
+InterpreterCreateScope local.node local.parentScope:
+	local.this = self.this
+
+	local.scope = local.this.createObject waitexec level.FunctionCall NULL NULL
+	local.scope.parentScope = local.parentScope
+
+	if (!local.parentScope)
+	{
+		local.this.initGlobalScope waitexec level.FunctionCall NULL local.scope
+	}
+
+	println "Populating Scope: local.scope = " local.scope ", local.node = " local.node
+	local.this.populateScope_ waitexec level.FunctionCall NULL local.node local.scope
+
+end local.scope
+
+InterpreterInitGlobalScope local.scope:
+	local.this = self.this
+	local.infinityPrimitive = local.this.createPrimitive waitexec level.FunctionCall NULL local.this.INFINITY
+	local.nanPrimitive = local.this.createPrimitive waitexec level.FunctionCall NULL local.this.NAN
+
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "Infinity" local.infinityPrimitive 1
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "NaN" local.nanPrimitive 1
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "undefined" local.this.UNDEFINED 1
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "window" local.scope 1
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "self" local.scope 0 // editable
+
+	local.this.initFunction waitexec level.FunctionCall NULL local.scope
+	// TODO: the init object calls
+end
+
+InterpreterPopulateScope local.node local.scope:
+	goto InterpreterPopulateScope_afterInners
+
+	InterpreterPopulateScope_recurse local.child local.scope:
+		local.this = self.this
+		if (local.child["constructor"] == local.this.ast["constructor"])
+		{
+			local.this.populateScope_ waitexec level.FunctionCall NULL local.child local.scope
+		}
+	end
+
+	InterpreterPopulateScope_afterInners:
+
+	local.this = self.this
+	local.recurse = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterPopulateScope_recurse) waitexec level.FunctionBind local.this
+
+	if (local.node["type"] == "VariableDeclaration")
+	{
+		local.childCount = (waitthread countNodeChildren local.node["declarations"])
+		for (local.i = 0; local.i < local.childCount; local.i++)
+		{
+			local.name = local.node["declarations"]["" + local.i]["id"]["name"]
+			println "Setting properties: [" local.i "] = " local.name
+			local.this.setProperty waitexec level.FunctionCall NULL local.scope local.name local.this.UNDEFINED
+		}
+	}
+	else if (local.node["type"] == "FunctionDeclaration")
+	{
+		// TODO: support this
+		end
+	}
+	else if (local.node["type"] == "FunctionExpression")
+	{
+		end
+	}
+
+	local.possibleKeys = local.this.ASTKEYLIST
+	for (local.i = 1; local.i < local.possibleKeys.size; local.i++)
+	{
+		local.prop = local.node[local.possibleKeys[local.i]]
+		if (local.prop && (waitthread typeof local.prop) == "object")
+		{
+			if (local.prop["0"])
+			{
+				// prop is an array
+				local.j = 0
+				while (local.prop[local.j + ""])
+				{
+					local.recurse waitexec level.FunctionCall NULL local.prop[local.j + ""] local.scope
+					local.j++
+				}
+			}
+			else
+			{
+				local.recurse waitexec level.FunctionCall NULL local.prop local.scope
+			}
+		}
+	}
+
+end
+
+countNodeChildren local.node:
+	local.index = 0;
+	while (local.node["" + local.index])
+	{
+		local.index++;
+	}
+end local.index
+
+InterpreterGetValue local.left:
+	local.this = self.this
+
+	if (local.left["0"] && local.left["1"])
+	{
+		local.obj = local.left["0"]
+		local.prop = local.left["1"]
+		end (waitthread local.this.getProperty FunctionCall NULL local.obj local.prop)
+	}
+	else
+	{
+		end (waitthread local.this.getValueFromScope waitexec level.FunctionCall NULL local.left)
+	}
+end
+
+InterpreterSetValue local.left local.value:
+	local.this = self.this
+
+	if (local.left["0"] && local.left["1"])
+	{
+		local.obj = local.left["0"]
+		local.prop = local.left["1"]
+		local.this.setProperty waitexec level.FunctionCall NULL local.obj local.prop local.value
+	}
+	else
+	{
+		local.this.setValueToScope waitexec level.FunctionCall NULL local.left local.value
+	}
+end
+
+InterpreterInitFunction local.scope:
+	local.this = self.this
+
+	goto InterpreterInitFunction_afterInners
+
+	InterpreterInitFunction_FunctionConstructor local.var_args:
+		local.this = self.this
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		println "ERROR: Function constructor eval unsupported!"
+	end
+
+	InterpreterInitFunction_ToString:
+		local.this = self.this
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		local.thisString = (local.this.toString waitexec level.FunctionCall)
+
+		end (local.thisInterpreter.createPrimitive waitexec level.FunctionCall NULL local.thisString)
+	end
+
+	InterpreterInitFunction_ValueOf:
+		local.this = self.this
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		local.thisValue = (local.this.valueOf waitexec level.FunctionCall)
+
+		end (local.thisInterpreter.createPrimitive waitexec level.FunctionCall NULL local.thisValue)
+	end
+
+	InterpreterInitFunction_afterInners:
+
+	local.this.FUNCTION = local.this.createObject waitexec level.FunctionCall NULL NULL
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "Function" local.this.FUNCTION
+	local.this.FUNCTION.type = "function"
+	local.proto = (local.this.createObject waitexec level.FunctionCall NULL NULL)
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.FUNCTION "prototype" local.proto
+	local.this.FUNCTION.nativeFunc = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitFunction_FunctionConstructor)
+
+	local.applyNode["type"] = "FunctionApply_"
+	local.applyNode["params"]["_"] = NULL
+	local.applyNode["id"] = NULL
+	local.applyNode["body"] = NULL
+	local.applyNode["start"] = 0
+	local.applyNode["end"] = 0
+
+	local.func = local.this.createFunction waitexec level.FunctionCall NULL local.applyNode // TODO: omitted obj as second arg
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.FUNCTION.properties["prototype"] "apply" local.func 0 1
+
+	local.callNode["type"] = "FunctionCall_"
+	local.callNode["params"]["_"] = NULL
+	local.callNode["id"] = NULL
+	local.callNode["body"] = NULL
+	local.callNode["start"] = 0
+	local.callNode["end"] = 0
+
+	local.func = local.this.createFunction waitexec level.FunctionCall NULL local.callNode // TODO: omitted obj as second arg
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.FUNCTION.properties["prototype"] "call" local.func 0 1
+
+	local.wrapper_toString = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitFunction_ToString)
+	local.wrapper_toString.closure["thisInterpreter"] = local.this
+	local.nativeToString = local.this.createNativeFunction waitexec level.FunctionCall NULL local.wrapper_toString
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.function.properties["prototype"] "toString" local.nativeToString 0 1
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.function "toString" local.nativeToString 0 1 // TODO: is it ok to use the same object?
+
+	local.wrapper_valueOf = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitFunction_ValueOf)
+	local.wrapper_valueOf.closure["thisInterpreter"] = local.this
+	local.nativeValueOf = local.this.createNativeFunction waitexec level.FunctionCall NULL local.wrapper_valueOf
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.function.properties["prototype"] "valueOf" local.nativeValueOf 0 1
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.function "valueOf" local.nativeValueOf 0 1 // TODO: is it ok to use the same object?
+end
+
+InterpreterCreateFunction local.node local.opt_scope:
+	local.this = self.this
+
+	local.func = local.this.createObject waitexec level.FunctionCall NULL local.this.FUNCTION
+	local.func.parentScope = local.opt_scope
+	if (!local.func.parentScope)
+	{
+		local.func.parentScope = (local.this.getScope waitexec level.FunctionCall)
+	}
+	local.func.node = local.node
+	local.primitive = local.this.createPrimitive waitexec level.FunctionCall NULL local.func.node["params"]["length"]
+	local.this.setProperty waitexec level.FunctionCall NULL local.func "length" local.primitive 1
+
+end local.func
+
+InterpreterCreateNativeFunction local.nativeFunc:
+	local.this = self.this
+
+	local.func = local.this.createObject waitexec level.FunctionCall NULL local.this.FUNCTION
+	local.primitive = local.this.createPrimitive waitexec level.FunctionCall NULL local.nativeFunc.length // TODO: length is not set since this isn't actually javascript
+	local.this.setProperty waitexec level.FunctionCall NULL local.func "length" local.primitive 1
+
+end local.func
+
+// InterpreterInitFunction local.scope:
+// 	local.this = self.this
+// 	local.thisInterpreter = self.this
+//
+// 	goto InterpreterInitFunction_afterInners
+//
+// 	InterpreterInitFunction_FunctionConstructorWrapper local.var_args:
+// 		iprintlnbold_noloc "The function constructor is unsupported"
+// 		// local.this = self.this
+// 		// local.arguments = self.arguments
+// 		// local.argSize = waitthread varargs_size local.arguments
+// 		// local.thisInterpreter = local.this.thisInterpreter
+// 		//
+// 		// if (local.this.parent == local.thisInterpreter.FUNCTION)
+// 		// {
+// 		// 	// called with new
+// 		// 	local.newFunc = local.this
+// 		// }
+// 		// else
+// 		// {
+// 		// 	local.newFunc = local.thisInterpreter.createObject waitexec level.FunctionCall NULL local.thisInterpreter.FUNCTION
+// 		// }
+// 		//
+// 		// if (local.argSize)
+// 		// {
+// 		// 	local.code = local.arguments[local.argSize]
+// 		// }
+// 		// else
+// 		// {
+// 		// 	local.code = ""
+// 		// }
+// 		//
+// 		// local.newArgs = ""
+// 		// for (local.i = 1; local.i < local.argSize; local.i++)
+// 		// {
+// 		// 	local.newArgs = local.newArgs + local.arguments[local.i]
+// 		//
+// 		// 	if (local.i != local.argSize - 1)
+// 		// 	{
+// 		// 		local.newArgs = local.newArgs + ", "
+// 		// 	}
+// 		// }
+// 		//
+// 		// // TODO: This is supposed to link to the global scope
+// 		// // but I am just too lazy right now
+// 		// local.newFunc.parentScope = (local.thisInterpreter.stateStack waitthread stackPeek)["scope"]
+// 		//
+// 	end
+//
+// 	InterpreterInitFunction_afterInners:
+//
+// 	local.this.FUNCTION = local.this.createObject waitexec level.FunctionCall NULL NULL
+// 	local.this.setProperty waitexec level.FunctionCall NULL local.scope 'Function' local.this.FUNCTION
+//
+// 	// Manually setup type and prototype because createObj doesn't recognize
+// 	// this object as a function (this.FUNCTION did not exist).
+// 	local.this.FUNCTION.type = 'function';
+// 	local.this.setProperty waitexec level.FunctionCall NULL local.this.FUNCTION 'prototype' (local.this.createObject waitexec level.FunctionCall NULL NULL)
+//   	local.this.FUNCTION.nativeFunc = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitFunction_FunctionConstructorWrapper) waitexec level.FunctionBind local.this.FUNCTION
+//
+// 	local.node = spawn Listener
+// 	local.node.type = 'FunctionApply_'
+// 	// local.node.params = []
+// 	local.node.id = NULL
+// 	local.node.body = NULL
+// 	local.node.start = 0
+// 	local.node.end = 0
+//
+// 	local.funcObj = local.this.createFunction waitexec level.FunctionCall NULL local.node (spawn Listener)
+// 	local.this.setProperty waitexec level.FunctionCall NULL local.this.FUNCTION.properties["prototype"] "apply" local.funcObj 0 1
+//
+// 	local.node = spawn Listener //
+// 	// local.node.params = []
+// 	local.node.id = NULL
+// 	local.node.body = NULL
+// 	local.node.start = 0
+// 	local.node.end = 0
+//
+// 	// local.funcObj = local.this.createFunction waitexec level.FunctionCall NULL local.node (spawn Listener)
+// 	// local.this.setProperty waitexec level.FunctionCall NULL local.this.FUNCTION.properties["prototype"] "call" local.funcObj 0 1
+//
+// 	// Function has no parent to inherit from, so it needs its own mandatory
+// 	// toString and valueOf functions.
+// 	// TODO: Implement toString and valueOf
+// end
+
+InterpreterInitObject local.scope:
+	local.this = self.this
+
+	goto InterpreterInitObject_afterInners
+
+	InterpreterInitObject_ObjectConstructor local.var_args:
+		local.this = self.this
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		if (local.this.parent == local.thisInterpreter.OBJECT)
+		{
+			local.newObj = local.this
+		}
+		else
+		{
+			local.newObj = (local.thisInterpreter.createObject waitexec level.FunctionCall NULL local.thisInterpreter.OBJECT)
+		}
+
+		end local.newObj
+	end
+
+	InterpreterInitObject_ToString:
+		local.this = self.this
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		local.thisString = (local.this.toString waitexec level.FunctionCall)
+
+		end (local.thisInterpreter.createPrimitive waitexec level.FunctionCall NULL local.thisString)
+	end
+
+	InterpreterInitObject_ValueOf:
+		local.this = self.this
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		local.thisValue = (local.this.valueOf waitexec level.FunctionCall)
+
+		end (local.thisInterpreter.createPrimitive waitexec level.FunctionCall NULL local.thisValue)
+	end
+
+	InterpreterInitObject_afterInners:
+
+	local.wrapper_ObjectConstructor = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitObject_ObjectConstructor)
+	local.wrapper_ObjectConstructor.closure["thisInterpreter"] = local.this
+	local.this.OBJECT = (local.this.createNativeFunction waitexec level.FunctionCall NULL local.wrapper_ObjectConstructor)
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "Object" local.this.OBJECT
+
+	local.wrapper_ToString = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitObject_ToString)
+	local.wrapper_ToString.closure["thisInterpreter"] = local.this
+	local.nativeToString = (local.this.createNativeFunction waitexec level.FunctionCall NULL local.wrapper_ToString)
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.OBJECT.properties["prototype"] "toString" local.nativeToString 0 1
+
+	local.wrapper_ValueOf = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitObject_ValueOf)
+	local.wrapper_ValueOf.closure["thisInterpreter"] = local.this
+	local.nativeValueOf = (local.this.createNativeFunction waitexec level.FunctionCall NULL local.wrapper_ValueOf)
+	local.this.setProperty waitexec level.FunctionCall NULL local.this.OBJECT.properties["prototype"] "valueOf" local.nativeValueOf 0 1
+
+	// all of the properties of this.OBJECT are defined
+end
+
+InterpreterInitArray local.scope:
+	local.this = self.this
+
+	goto InterpreterInitArray_afterInners
+
+	InterpreterInitArray_getInt local.obj local.def:
+		local.n = NIL
+		if (local.obj)
+		{
+			local.n = int (local.obj.toNumber waitexec level.FunctionCall)
+		}
+		else
+		{
+			local.n = local.def
+		}
+
+		if (waitthread isNaN local.n)
+		{
+			local.n = local.def
+		}
+
+		end local.n
+	end
+
+	InterpreterInitArray_ArrayConstructor local.size_:
+		local.this = self.this
+		local.arguments = self.arguments
+		local.thisInterpreter = self.closure["thisInterpreter"]
+
+		if (local.this.parent == local.thisInterpreter.ARRAY)
+		{
+			local.newArray = local.this
+		}
+		else
+		{
+			local.newArray = (local.thisInterpreter.createObject waitexec level.FunctionCall NULL local.thisInterpreter.ARRAY)
+		}
+
+		local.first = local.arguments[0]
+		if (local.first && local.first.type == "number")
+		{
+			local.arrIndex = local.thisInterpreter.arrayIndex waitexec level.FunctionCall NULL local.first
+			if (waitthread isNaN local.arrIndex)
+			{
+				println ("ERROR: Tried to index an array with a non-index?")
+				end (waitexec lib/function.scr::CallStackTrace)
+			}
+
+			local.newArray.length = local.first.data
+		}
+		else
+		{
+			local.argsLength = level.ListSize waitexec level.FunctionCall local.arguments
+			for (local.i = 0; local.i < local.argsLength; local.i++)
+			{
+				local.newArray.properties["" + local.i] = local.arguments[local.i]
+			}
+			local.newArray.length = local.i
+		}
+		end local.newArray
+	end
+
+
+
+	InterpreterInitArray_afterInners:
+
+	local.getInt = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitArray_getInt)
+
+	local.wrapper_ArrayConstructor = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitArray_ArrayConstructor)
+	local.wrapper_ArrayConstructor.closure["thisInterpreter"] = local.this
+	local.this.ARRAY = local.this.createNativeFunction waitthread NULL local.wrapper_ArrayConstructor
+	local.this.setProperty waitexec level.FunctionCall NULL local.scope "Array" local.this.ARRAY
+	// TODO: break this out into a separate file, because it's getting to be a bit much
+end
+
+// InterpreterInitNumber local.scope:
+// 	local.this = self.this;
+//
+// 	goto InterpreterInitNumber_afterInners
+//
+// 	InterpreterInitNumber_NumberConstructorWrapper local.value:
+//
+// 		goto InterpreterInitNumber_NumberConstructorWrapper_afterInners
+// 			InterpreterInitNumber_NumberConstructorWrapper_toBoolean:
+// 				local.value = (int self.closure["value"])
+// 			end local.value
+//
+// 			InterpreterInitNumber_NumberConstructorWrapper_toNumber:
+// 				local.value = self.closure["value"]
+// 			end local.value
+//
+// 			InterpreterInitNumber_NumberConstructorWrapper_toString:
+// 				local.value = ""+ self.closure["value"]
+// 			end local.value
+//
+// 		InterpreterInitNumber_NumberConstructorWrapper_afterInners:
+//
+// 		local.innerThis = self.this
+// 		local.thisInterpreter = self.closure["thisInterpreter"]
+//
+// 		if (local.value)
+// 		{
+// 			local.value = (float local.value)
+// 		}
+// 		else
+// 		{
+// 			local.value = 0
+// 		}
+//
+// 		if (local.innerThis.parent == local.thisInterpreter.NUMBER)
+// 		{
+// 			local.innerThis.closure["value"]
+// 			local.innerThis.toBoolean = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitNumber_NumberConstructorWrapper_toBoolean) waitexec level.FunctionBind local.innerThis
+// 		}
+// 		else
+// 		{
+// 			end (local.thisInterpreter.createPrimitive waitexec level.FunctionCall NULL local.value)
+// 		}
+// 	InterpreterInitNumber_afterInners:
+//
+// 	local.this.NUMBER = local.this.createNativeFunction waitexec level.FunctionCall NULL (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterInitNumber_NumberConstructorWrapper)
+// end
+
+InterpreterComp local.a local.b:
+	// TODO: Handle string comparison!!!
+	local.this = self.this
+
+	local.toa = waitthread typeof local.a
+	local.tob = waitthread typeof local.b
+	if ((local.a.isPrimitive && local.toa == "number" && local.a.data == local.this.NAN) ||
+		(local.b.isPrimitive && local.tob == "number" && local.b.data == local.this.NAN))
+	{
+		end local.this.NAN
+	}
+
+	if (local.a.isPrimitive && local.b.isPrimitive)
+	{
+		local.a = local.a.data
+		local.b = local.b.data
+	}
+	else
+	{
+		// TODO: Handle other types
+		end local.this.NAN
+	}
+
+	if (local.a < local.b)
+	{
+		end -1
+	}
+	else if (local.a > local.b)
+	{
+		end 1
+	}
+
+end 0
+
+InterpreterArrayIndex local.n:
+	local.this = self.this
+
+	local.n = (float local.n)
+	if (local.n == local.this.INFINITY || local.n != (int local.n) || local.n < 0)
+	{
+		end local.this.NAN
+	}
+end local.n
+
+InterpreterCreatePrimitive local.data:
+	goto InterpreterCreatePrimitive_afterInners
+	InterpreterCreatePrimitive_toBoolean:
+		end (!!self.this.data)
+	end
+	InterpreterCreatePrimitive_toNumber:
+		end (float self.this.data)
+	end
+	InterpreterCreatePrimitive_toString:
+		end ("" + self.this.data)
+	end
+	InterpreterCreatePrimitive_valueOf:
+		end self.this.data
+	end
+	InterpreterCreatePrimitive_afterInners:
+
+	local.this = self.this
+
+	local.type = waitthread typeof local.data
+	local.obj = spawn Listener
+	local.obj.data = local.data
+	local.obj.isPrimitive = 1
+	local.obj.type = local.type
+	local.obj.toBoolean = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreatePrimitive_toBoolean) waitexec level.FunctionBind local.obj
+	local.obj.toNumber = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreatePrimitive_toNumber) waitexec level.FunctionBind local.obj
+	local.obj.toString = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreatePrimitive_toString) waitexec level.FunctionBind local.obj
+	local.obj.valueOf = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreatePrimitive_valueOf) waitexec level.FunctionBind local.obj
+
+	if (local.type == "number")
+	{
+		local.obj.parent = local.this.NUMBER
+	}
+	else if (local.type == "string")
+	{
+		//local.obj.parent = local.this.STRING
+	}
+	else if (local.type == "boolean")
+	{
+		local.obj.parent = local.this.BOOLEAN
+	}
+end local.obj
+
+InterpreterCreateObject local.parent:
+	local.this = self.this
+
+	goto InterpreterCreateObject_afterInners
+
+	InterpreterCreateObject_toBoolean:
+		end (1)
+	end
+	InterpreterCreateObject_toNumber:
+		end (0)
+	end
+	InterpreterCreateObject_toString:
+		end ("[" + self.this.type + "]")
+	end
+	InterpreterCreateObject_valueOf:
+		end self.this
+	end
+	InterpreterCreateObject_Array_toString:
+		local.str = ""
+		local.length = self.this.length
+
+		for (local.i = 0; local.i < local.length; local.i++)
+		{
+			local.str = local.str + (self.this.properties[local.i].toString waitexec level.FunctionCall)
+
+			if (local.i != local.length - 1)
+			{
+				local.str = local.str + ","
+			}
+		}
+	end local.str
+
+	InterpreterCreateObject_afterInners:
+
+	local.obj = spawn Listener
+	local.obj.isPrimitive = 0
+	local.obj.type = "object"
+	local.obj.parent = local.parent
+	local.obj.fixed[0] = 0  // a hash object for later
+	local.obj.nunenumerable[0] = 0 // a hash object for later
+	local.obj.properties[0] = 0 // a hash object for later
+	local.obj.toBoolean = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreateObject_toBoolean) waitexec level.FunctionBind local.obj
+	local.obj.toNumber = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreateObject_toNumber) waitexec level.FunctionBind local.obj
+	local.obj.toString = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreateObject_toString) waitexec level.FunctionBind local.obj
+	local.obj.valueOf = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreateObject_valueOf) waitexec level.FunctionBind local.obj
+
+	if (local.this.isa waitexec level.FunctionCall NULL local.obj local.this.FUNCTION)
+	{
+		local.obj.type = "function"
+	}
+	else if (local.this.isa waitexec level.FunctionCall NULL local.obj local.this.ARRAY)
+	{
+		local.obj.length = 0
+		local.obj.toString = (waitexec level.FunctionNew lib/morpheus/interpreter.scr::InterpreterCreateObject_Array_toString) waitexec level.FunctionBind local.obj
+	}
+
+end local.obj
+
+InterpreterIsa local.child local.parent:
+
+	if (!local.child || !local.parent)
+	{
+		end 0
+	}
+	else if (local.child.parent == local.parent)
+	{
+		end 1
+	}
+	else if (!local.child.parent || !local.child.parent.prototype)
+	{
+		end 0
+	}
+
+local.isa = self.this.isa waitexec level.FunctionCall NULL local.child.parent.prototype local.parent
+
+end local.isa
+
+InterpreterGetAstKeyList:
+local.keys = "alternate"::"argument"::"block"::"blocks"::"body"::"callee"::"cases"::"column"::"computed"::"consequent"::"declarations"::"defaults"::"discriminant"::"each"::"elements"::"end"::"expression"::"expressions"::"filter"::"finalizer"::"generator"::"guard"::"guardedHandlers"::"handler"::"head"::"id"::"index"::"init"::"key"::"kind"::"label"::"left"::"lexical"::"line"::"loc"::"name"::"object"::"operator"::"param"::"params"::"prefix"::"properties"::"property"::"rest"::"right"::"source"::"start"::"test"::"type"::"update"::"value"
+end local.keys
+
+InterpreterGetAstKeys:
+local.keys["alternate"] = 1
+local.keys["argument"] = 1
+local.keys["block"] = 1
+local.keys["blocks"] = 1
+local.keys["body"] = 1
+local.keys["callee"] = 1
+local.keys["cases"] = 1
+local.keys["column"] = 1
+local.keys["computed"] = 1
+local.keys["consequent"] = 1
+local.keys["declarations"] = 1
+local.keys["defaults"] = 1
+local.keys["discriminant"] = 1
+local.keys["each"] = 1
+local.keys["elements"] = 1
+local.keys["end"] = 1
+local.keys["expression"] = 1
+local.keys["expressions"] = 1
+local.keys["filter"] = 1
+local.keys["finalizer"] = 1
+local.keys["generator"] = 1
+local.keys["guard"] = 1
+local.keys["guardedHandlers"] = 1
+local.keys["handler"] = 1
+local.keys["head"] = 1
+local.keys["id"] = 1
+local.keys["index"] = 1
+local.keys["init"] = 1
+local.keys["key"] = 1
+local.keys["kind"] = 1
+local.keys["label"] = 1
+local.keys["left"] = 1
+local.keys["lexical"] = 1
+local.keys["line"] = 1
+local.keys["loc"] = 1
+local.keys["name"] = 1
+local.keys["object"] = 1
+local.keys["operator"] = 1
+local.keys["param"] = 1
+local.keys["params"] = 1
+local.keys["prefix"] = 1
+local.keys["properties"] = 1
+local.keys["property"] = 1
+local.keys["rest"] = 1
+local.keys["right"] = 1
+local.keys["source"] = 1
+local.keys["start"] = 1
+local.keys["test"] = 1
+local.keys["type"] = 1
+local.keys["update"] = 1
+local.keys["value"] = 1
+end local.keys
+
+factorial local.num:
+
+if (local.num == NIL || local.num == NULL) { end }
+
+if (local.num <= 1)
+{
+	end 1
+}
+
+local.temp = local.num * (level.factorial waitexec level.FunctionCall NULL (local.num - 1))
+
+end local.temp
+
+arrayMap local.func:
+
+local.arr = self.this
+
+for (local.i = 1; local.i <= local.arr.size; local.i++)
+{
+local.newArr[local.i] = local.func waitexec level.FunctionCall NULL local.arr[local.i]
+}
+
+end local.newArr
+
+// asdfqwer
+ListSize:
+	local.list = self.this
+	local.i = 0
+	local.count = 0
+
+	// determine indexing
+	if ((local.list[0] == NIL && local.list["0"] == NIL) &&
+	 	(local.list[1] != NIL || local.list["1"] != NIL))
+	{
+		local.i = 1
+	}
+
+	for (;local.list[local.i] != NIL || local.list["" + local.i] != NIL; local.i++)
+	{
+		local.count++;
+	}
+end local.count
+
+// doesn't quite work yet with
+// single-digit number strings like "1"
+typeof local.value:
+
+	if (local.value == NULL)
+	{
+		end "object"
+	}
+	else if (local.value == NIL)
+	{
+		end "undefined"
+	}
+	else if (local.value.type == "function")
+	{
+		end "function"
+	}
+	else if (waitthread isNumber local.value && (float local.value) == local.value)
+	{
+		end "number"
+	}
+	else if (local.value.size != NIL && local.value + "" == local.value)
+	{
+	    end "string"
+	}
+	else
+	{
+		end "object"
+	}
+end NIL
+
+isNaN local.value:
+end !((float local.value) == local.value)
+
+isNumber local.value:
+	if (local.value == 0 || local.value == 0.0)
+	{
+		end 1
+	}
+	local.float = float local.value
+end local.float
+
+varargs_size local.args:
+	for (local.i = 1; local.i < local.args.size; local.i++)
+	{
+		if (local.args[local.i] == NIL)
+		{
+			break;
+		}
+	}
+end (local.i - 1)
