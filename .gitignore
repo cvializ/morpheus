@@ -3,6 +3,7 @@ config.csv
 video
 save
 sound
+node_modules
 *.dll
 *.pk3
 *.cfg
